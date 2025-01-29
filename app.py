@@ -1,43 +1,65 @@
 import streamlit as st
 import tensorflow as tf
-from tensorflow.keras.models import load_model
 import numpy as np
+import matplotlib.pyplot as plt
 from PIL import Image
+import io
 
-# Load the model (Make sure the model file is in the correct path)
+# Load the trained model (replace with your actual model path)
 @st.cache_resource
-def load_trained_model():
-    model = load_model('double_unet_pruned_model.h5', compile=False)
+def load_model():
+    # Change the path to the location of your trained model
+    model = tf.keras.models.load_model('ultrasound_nerve_segmentation_model.h5')
     return model
 
-# Initialize model
-model = load_trained_model()
+# Function to preprocess image (if needed)
+def preprocess_image(image):
+    image = image.convert('RGB')
+    image = np.array(image)
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    image = image / 255.0  # Normalize image if required
+    return image
 
-# Streamlit app
-st.title("Image Segmentation with U-Net")
-st.write("Upload an image and get the segmented output.")
+# Function to postprocess model output (if needed)
+def postprocess_output(output):
+    output = np.squeeze(output, axis=0)  # Remove batch dimension
+    output = np.argmax(output, axis=-1)  # Convert to class labels
+    return output
 
-# Upload image
-uploaded_image = st.file_uploader("Choose an image...", type="jpg")
+# Set up Streamlit layout
+st.title("Ultrasound Nerve Segmentation")
 
-if uploaded_image is not None:
-    # Open the uploaded image using PIL
-    image = Image.open(uploaded_image)
-    
-    # Preprocess the image (resizing to the expected input size of the model)
-    image = image.resize((256, 256))  # Assuming your model expects 256x256 input
-    image_array = np.array(image) / 255.0  # Normalize the image (if required by your model)
-    
-    # Add batch dimension
-    image_array = np.expand_dims(image_array, axis=0)
+st.write("Upload an ultrasound image to segment the nerve.")
 
-    # Predict segmentation mask
-    with st.spinner("Processing..."):
-        prediction = model.predict(image_array)
-    
-    # Process output (Assuming the model output is a mask of the same size as input)
-    mask = prediction[0]  # Assuming model outputs a batch of predictions, take the first one
-    
-    # Display the results
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-    st.image(mask, caption="Segmentation Output", use_column_width=True)
+# File upload widget
+uploaded_file = st.file_uploader("Choose an ultrasound image...", type=["jpg", "jpeg", "png"])
+
+if uploaded_file is not None:
+    # Load the image
+    image = Image.open(uploaded_file)
+
+    # Preprocess the image
+    preprocessed_image = preprocess_image(image)
+
+    # Load the pre-trained model
+    model = load_model()
+
+    # Predict the segmentation mask
+    with st.spinner('Segmenting the nerve...'):
+        output = model.predict(preprocessed_image)
+
+    # Postprocess and visualize the output
+    segmented_image = postprocess_output(output)
+
+    # Show the original and segmented image side by side
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    axes[0].imshow(image)
+    axes[0].set_title("Original Image")
+    axes[0].axis('off')
+
+    axes[1].imshow(segmented_image, cmap='gray')
+    axes[1].set_title("Segmented Image")
+    axes[1].axis('off')
+
+    st.pyplot(fig)
